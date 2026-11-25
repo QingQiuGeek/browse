@@ -11,11 +11,9 @@ base64.workspace = true
 browse-core.workspace = true
 browse-page.workspace = true
 serde.workspace = true
-# preserve_order keeps captured JSON bodies in their original key order after redaction, like JSON.stringify.
 serde_json = { workspace = true, features = ["preserve_order"] }
 tokio.workspace = true
 png = "0.18"
-regex = { version = "1", default-features = false, features = ["std", "perf"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

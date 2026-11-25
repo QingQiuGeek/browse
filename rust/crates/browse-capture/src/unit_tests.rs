@@ -23,7 +23,10 @@ fn private_root(name: &str) -> std::path::PathBuf {
 #[tokio::test]
 async fn out_of_process_iframe_documents_complete_across_sessions() {
     let cdp = FakeCdp::new();
-    cdp.reply("Network.getResponseBody", json!({ "body": "{\"ok\":true}", "base64Encoded": false }));
+    let path = "https://other.test/api?api_key=fixture-query-token";
+    let request_body = r#"{ "token": "fixture-query-token" }"#;
+    let response_body = r#"{ "price": 12345, "available": true, "echo": "fixture-query-token" }"#;
+    cdp.reply("Network.getResponseBody", json!({ "body": response_body, "base64Encoded": false }));
     let ctx = context(cdp.clone(), vec![]);
     let network = tool("network");
     let (error, _) = call(&ctx, network.as_ref(), json!({ "action": "start" })).await;
@@ -46,10 +49,17 @@ async fn out_of_process_iframe_documents_complete_across_sessions() {
     // A JSON request inside the iframe: its body is fetched from the iframe's session.
     cdp.emit(
         "Network.requestWillBeSent",
-        json!({ "requestId": "7.1", "type": "Fetch", "request": { "url": "https://other.test/api", "method": "GET", "headers": {} } }),
+        json!({ "requestId": "7.1", "type": "Fetch", "request": {
+            "url": path, "method": "POST", "postData": request_body,
+            "headers": { "content-type": "application/json", "cookie": "sid=12345; enabled=true",
+                         "authorization": "Bearer fixture-authorization" }
+        } }),
         Some("child"),
     );
-    let api = json!({ "status": 200, "statusText": "OK", "headers": { "content-type": "application/json" }, "mimeType": "application/json" });
+    let api = json!({ "status": 200, "statusText": "OK",
+        "headers": { "content-type": "application/json", "set-cookie": "sid=12345; HttpOnly" },
+        "mimeType": "application/json"
+    });
     cdp.emit("Network.responseReceived", json!({ "requestId": "7.1", "response": api }), Some("child"));
     cdp.emit("Network.loadingFinished", json!({ "requestId": "7.1" }), Some("child"));
     settle().await;
@@ -67,11 +77,23 @@ async fn out_of_process_iframe_documents_complete_across_sessions() {
     assert_eq!(document["response"]["body"]["size"], json!(1234));
     assert_eq!(document["response"]["body"]["truncated"], json!(false));
     assert!(document["response"]["body"]["omitted"].as_str().unwrap().starts_with("not returned"));
-    assert_eq!(exchanges[1]["response"]["body"]["text"], json!("{\"ok\":true}"));
+    let exchange = &exchanges[1];
+    assert_eq!(exchange["request"]["url"], json!(path));
+    assert_eq!(exchange["request"]["body"]["text"], json!(request_body));
+    assert_eq!(exchange["response"]["body"]["text"], json!(response_body));
+    assert!(exchange["request"]["headers"].as_array().unwrap().contains(
+        &json!({ "name": "cookie", "value": "sid=12345; enabled=true" })
+    ));
+    assert!(exchange["request"]["headers"].as_array().unwrap().contains(
+        &json!({ "name": "authorization", "value": "Bearer fixture-authorization" })
+    ));
+    assert!(exchange["response"]["headers"].as_array().unwrap().contains(
+        &json!({ "name": "set-cookie", "value": "sid=12345; HttpOnly" })
+    ));
     let fetched = cdp.calls("Network.getResponseBody");
     assert_eq!(fetched.len(), 1, "{fetched:?}");
     assert_eq!(fetched[0].1.as_deref(), Some("child"));
-    assert_eq!(stopped["capturedBodyBytes"], json!(11));
+    assert_eq!(stopped["capturedBodyBytes"], json!(request_body.len() + response_body.len()));
     assert_eq!(cdp.calls("Network.enable").iter().filter(|(_, session)| session.as_deref() == Some("child")).count(), 1);
 }
 

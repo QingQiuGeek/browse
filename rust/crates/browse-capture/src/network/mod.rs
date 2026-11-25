@@ -1,9 +1,7 @@
-//! Protocol-agnostic network capture over `CaptureDriver::network()`: filtering, redaction, body budgets, and
+//! Protocol-agnostic network capture over `CaptureDriver::network()`: filtering, body budgets, and
 //! HAR-style exchange assembly.
 
 mod model;
-
-pub use model::{CapturedEntry, finish};
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex as SyncMutex, Weak};
@@ -18,10 +16,12 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::{Semaphore, oneshot};
 
-use crate::redaction::Header;
 use crate::state::{BusyGuard, TaskGuard};
 use crate::{arg_action, arg_bool, arg_int, arg_str, bail_user, json_output, respond, state, tab_schema, target_tab};
-use model::{Budget, CapturedRequest, CapturedResponse, MAX_ENTRIES, body_can_fit, content_type, is_returnable_mime_type};
+use model::{
+    Budget, CapturedEntry, CapturedRequest, CapturedResponse, Header, MAX_ENTRIES, body_can_fit, content_type,
+    is_returnable_mime_type,
+};
 
 const DEFAULT_MAX_DURATION_MS: i64 = 30 * 60_000;
 const MAX_FINALIZERS: usize = 4;
@@ -524,24 +524,23 @@ async fn end_with_tab(weak: Weak<state::CaptureState>, shared: Arc<Shared>, reas
 }
 
 fn stop_result(active: &Active, entries: &[CapturedEntry]) -> Value {
-    let (redacted, omissions) = finish(entries);
     let inner = active.shared.inner.lock().unwrap();
     let mut result = json!({
         "active": false,
         "tab": active.tab,
         "startedAt": active.started_at,
         "stoppedAt": crate::now_iso(),
-        "entryCount": redacted.len(),
-        "responseCount": redacted.iter().filter(|entry| entry.response.is_some()).count(),
-        "failureCount": redacted.iter().filter(|entry| entry.failure.is_some()).count(),
+        "entryCount": entries.len(),
+        "responseCount": entries.iter().filter(|entry| entry.response.is_some()).count(),
+        "failureCount": entries.iter().filter(|entry| entry.failure.is_some()).count(),
         "capturedBodyBytes": inner.budget.captured_body_bytes,
-        "truncatedBodyCount": inner.budget.truncated_body_count + omissions,
+        "truncatedBodyCount": inner.budget.truncated_body_count,
         "droppedEntryCount": inner.dropped_entry_count,
     });
     if inner.missed_event_count > 0 {
         result["missedEventCount"] = json!(inner.missed_event_count);
     }
-    result["exchanges"] = json!(redacted);
+    result["exchanges"] = json!(entries);
     result
 }
 
@@ -573,14 +572,10 @@ impl Tool for NetworkTool {
             description: "Capture a tab's network traffic. One capture per tab. \
                 start begins capturing (filters optional); status returns counters only; stop ends it and returns every \
                 exchange (method, url, headers, status, bodies; 1000 requests max); cancel discards it. JSON, form \
-                and multipart bodies are returned as text (≤1 MB each, 25 MB per capture); other bodies (HTML, \
-                scripts, CSS, images, ...) are never fetched and only described {mimeType, size, omitted}, since they \
-                can't be checked for credentials. If the tab closes the capture ends and the next stop still returns \
-                what it captured, with endedBecause. Credentials are always replaced with [redacted]: authorization and API-key headers, all \
-                cookie values, secret-named query/fragment/JSON/form fields, token-like path segments, and known values \
-                where they reappear in URLs, headers and JSON bodies (inside JSON bodies a value under 16 characters is \
-                matched only if it came from a password or one-time-code field, or from a secret-named URL query or \
-                fragment field and is at least 8 characters). A capture ends itself after maxDurationMs."
+                and multipart bodies are returned as text (≤5 MB each, 25 MB per capture); other bodies (HTML, \
+                scripts, CSS, images, ...) are described by mimeType, size and omitted. If the tab closes, the \
+                next stop returns what the capture collected, with endedBecause. Captured URLs, headers and body \
+                text are returned without redaction and may contain credentials. A capture ends itself after maxDurationMs."
                 .into(),
             input_schema: json!({
                 "type": "object",

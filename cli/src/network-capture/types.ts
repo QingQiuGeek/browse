@@ -118,7 +118,7 @@ export type ActiveCapture = {
   endsAt?: string
 }
 
-export const defaultMaxBodyBytes = 1_000_000
+export const defaultMaxBodyBytes = 5_000_000
 export const defaultMaxTotalBodyBytes = 25_000_000
 export const defaultMaxEntries = 1_000
 export const maxFinalizeWorkers = 4

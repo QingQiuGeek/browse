@@ -1,4 +1,4 @@
-//! Capture tools: screenshots (labels, element clips, full page, diff), network capture with redaction, opt-in page
+//! Capture tools: screenshots (labels, element clips, full page, diff), network capture, opt-in page
 //! console capture and screen recording (CDP screencast → MJPEG Matroska, optionally transcoded with ffmpeg).
 //! Downloads aren't offered: Chrome refuses Page/Browser.setDownloadBehavior through chrome.debugger, and the browser
 //! may run on another machine than the relay. Everything runs over raw CDP through `ToolContext::browser`; nothing
@@ -17,7 +17,6 @@ pub mod mkv;
 mod network;
 mod page;
 pub mod pixeldiff;
-pub mod redaction;
 mod recording;
 mod screencast;
 mod screenshot;

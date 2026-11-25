@@ -78,7 +78,7 @@ async fn live_capture_tools() {
     let not_png = tool("screenshot_diff").call(ctx.clone(), in_tab(json!({ "baseline": "shots/photo.jpg" }))).await.unwrap();
     assert!(not_png.is_error && format!("{:?}", not_png.content).contains("must be a PNG"), "{:?}", not_png.content);
 
-    // Network capture with redaction, inline and as HAR.
+    // Network capture returns the original values supplied by the local fixture.
     call(&ctx, "network", json!({ "action": "start", "urlFilter": "/api" })).await;
     assert_eq!(evaluate(&cdp, "go().then(r => r.ok)").await, json!(true));
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -88,7 +88,7 @@ async fn live_capture_tools() {
     let stopped = call(&ctx, "network", json!({ "action": "stop" })).await;
     let raw = serde_json::to_string(&text(&stopped)).unwrap();
     for secret in ["supersecretquery123", "abcdefghijklmnopqrstuvwxyz", "hunter2hunter2", "sessvalue1234567890", "cookievalue1234567890"] {
-        assert!(!raw.contains(secret), "{secret} leaked: {raw}");
+        assert!(raw.contains(secret), "missing fixture value {secret}: {raw}");
     }
     assert_eq!(busy.lock().unwrap().get("network"), Some(&false));
     let exchanges = text(&stopped)["exchanges"].as_array().unwrap().clone();

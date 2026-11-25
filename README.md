@@ -241,7 +241,7 @@ OpenCode, which composes tools in code mode, gets the plain tools. Every other M
 | `click`, `fill`, `type`, `press`, `select`, `hover`, `drag`, `scroll` | Act on a ref, selector or point, with human-like input |
 | `wait_for`, `dialog`, `upload`, `eval` | Wait for text, a URL or an element; answer dialogs; set files on an input or a button that opens the file chooser; run JavaScript in the page |
 | `screenshot`, `screenshot_diff` | The viewport, full page, an element or a rectangle; compare with a baseline |
-| `network`, `console` | Capture a tab's traffic (credentials redacted) or its console messages and errors |
+| `network`, `console` | Capture a tab's traffic or its console messages and errors |
 | `recording` | Record a tab to a video file |
 | `emulate`, `webmcp` | Viewport, color scheme, user agent, geolocation and more; tools a page offers through WebMCP |
 | `tabs` | List, open or close tabs (`group` closes a whole group; an `id` names a tab for good, and opens it if it's missing) |
@@ -310,9 +310,8 @@ to steer it, and that other programs on your computer may try to use the relay.
   Snapshots, screenshots and the cookies the page itself can see stay readable. These keep an agent from wandering: for
   pages you don't want an agent to read, don't open them in browse.
 - **What output is masked.** `fill` hides values only for password and one-time-code fields. Snapshots leave out what's
-  typed in editable fields, but not other page text. Network capture redacts credentials by name and shape (auth and
-  API-key headers, cookie values, secret-named fields, token-like path segments), so a value under an ordinary name can
-  still come through. `eval` results, console messages, page text and screenshots are returned as they are.
+  typed in editable fields. Network capture returns captured URLs, headers and body text as-is, including credentials
+  present in the exchange. `eval` results, console messages, page text and screenshots are returned as they are.
 - **WebMCP tools come from the page.** Their names, titles, descriptions, schemas, annotations, `origin` and results are
   whatever a page supplies; browse doesn't verify them, and an annotation like `readOnly` is only the page's word. Treat
   them like any other page text, not as instructions from the user.
